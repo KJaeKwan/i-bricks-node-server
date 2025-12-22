@@ -128,3 +128,140 @@ export async function getAllDocs2(req, res, next) {
     next(e);
   }
 }
+
+function parseSort(sortStr) {
+  if (!sortStr) return undefined;
+
+  const allowed = new Set(["CRT_DTTM", "SCH_YEAR", "STDNO", "SCAL_SEQ"]);
+  const [field, dirRaw] = sortStr.split(":");
+  const dir = (dirRaw || "asc").toLowerCase();
+
+  if (!allowed.has(field)) {
+    const err = new Error(`Invalid sort field: ${field}`);
+    err.status = 400;
+    throw err;
+  }
+  if (dir !== "asc" && dir !== "desc") {
+    const err = new Error(`Invalid sort direction: ${dir}`);
+    err.status = 400;
+    throw err;
+  }
+
+  return [{ [field]: dir }];
+}
+
+function buildScholarshipFilters({ stdno, year, smt, inpart }) {
+  const filters = [];
+  if (stdno) filters.push({ term: { STDNO: stdno } });
+  if (typeof year === "number") filters.push({ term: { SCH_YEAR: year } });
+  if (smt) filters.push({ term: { SMT_RCD: smt } });
+  if (inpart) filters.push({ term: { INPART: inpart } });
+  return filters;
+}
+
+function buildQuery(filters) {
+  return filters.length === 0
+    ? { match_all: {} }
+    : { bool: { filter: filters } };
+}
+
+const zQueryBool = z.preprocess((v) => {
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true") return true;
+    if (s === "false") return false;
+  }
+  return v;
+}, z.boolean());
+
+export async function getAllDocs3(req, res, next) {
+  try {
+    const querySchema = z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      size: z.coerce.number().int().min(1).max(1000).default(50),
+      sort: z.string().optional(),
+
+      stdno: z.string().trim().min(1).optional(),
+      year: z.coerce.number().int().optional(),
+      smt: z.string().trim().min(1).optional(),
+      inpart: z.string().trim().min(1).optional(),
+
+      sourceOnly: zQueryBool.default(true),
+      includeRaw: zQueryBool.default(false),
+    });
+
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      const err = new Error("Invalid query params");
+      err.status = 400;
+      err.detail = parsed.error.flatten();
+      throw err;
+    }
+
+    const {
+      page,
+      size,
+      sort,
+      stdno,
+      year,
+      smt,
+      inpart,
+      sourceOnly,
+      includeRaw,
+    } = parsed.data;
+
+    const from = (page - 1) * size;
+
+    if (from + size > 10000) {
+      const err = new Error(
+        "Too deep pagination: from+size must be <= 10000 (use search_after later)"
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    const filters = buildScholarshipFilters({ stdno, year, smt, inpart });
+    const query = buildQuery(filters);
+    const esSort = parseSort(sort);
+
+    const raw = unwrapEsResponse(
+      await esClient.search({
+        index: "scholarship",
+        from,
+        size,
+        sort: esSort,
+        body: { query },
+      })
+    );
+
+    const hits = raw.hits?.hits ?? [];
+    const total = raw.hits?.total?.value ?? hits.length;
+
+    const items = sourceOnly ? hits.map((h) => h._source) : hits;
+
+    const response = {
+      meta: {
+        index: "scholarship",
+        page,
+        size,
+        from,
+        sort: sort || null,
+        filters: {
+          stdno: stdno ?? null,
+          year: year ?? null,
+          smt: smt ?? null,
+          inpart: inpart ?? null,
+        },
+        total,
+        took: raw.took,
+      },
+      items,
+    };
+
+    if (includeRaw) response.raw = raw;
+
+    return res.json(response);
+  } catch (e) {
+    next(e);
+  }
+}

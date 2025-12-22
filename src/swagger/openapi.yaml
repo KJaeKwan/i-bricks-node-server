@@ -109,3 +109,70 @@ paths:
       responses:
         "200":
           description: Elasticsearch search 응답 원문
+
+  /indices/scholarship3:
+    get:
+      summary: scholarship 인덱스 문서 조회 - 응답 가공
+      description: scholarship 인덱스에서 match_all 또는 term 필터(stdno/year/smt/inpart)를 적용해 조회한 결과를 반환합니다.
+      parameters:
+        - in: query
+          name: size
+          required: false
+          schema:
+            type: integer
+            default: 1000
+            minimum: 1
+            maximum: 10000
+          description: 가져올 문서 개수 (최대 10000)
+
+        - in: query
+          name: stdno
+          required: false
+          schema:
+            type: string
+          description: 학번(STDNO) exact match
+          example: "202010766"
+
+        - in: query
+          name: year
+          required: false
+          schema:
+            type: integer
+          description: 학년도(SCH_YEAR) exact match
+          example: 2024
+
+        - in: query
+          name: smt
+          required: false
+          schema:
+            type: string
+          description: 학기코드(SMT_RCD) exact match
+          example: "1"
+
+        - in: query
+          name: inpart
+          required: false
+          schema:
+            type: string
+          description: 소득분위(INPART) exact match
+          example: "8"
+
+        - in: query
+          name: sourceOnly
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: true면 items에 _source만 반환
+
+        - in: query
+          name: includeRaw
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: true면 raw(ES 원문 응답)도 포함
+
+      responses:
+        "200":
+          description: Elasticsearch search 응답 원문
