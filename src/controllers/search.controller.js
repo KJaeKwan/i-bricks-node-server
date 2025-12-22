@@ -265,3 +265,64 @@ export async function getAllDocs3(req, res, next) {
     next(e);
   }
 }
+
+export async function getScholarshipStats(req, res, next) {
+  try {
+    const querySchema = z.object({
+      stdno: z.string().trim().min(1).optional(),
+      year: z.coerce.number().int().optional(),
+      topN: z.coerce.number().int().min(1).max(50).default(10),
+    });
+
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      const err = new Error("Invalid query params");
+      err.status = 400;
+      err.detail = parsed.error.flatten();
+      throw err;
+    }
+
+    const { stdno, year, topN } = parsed.data;
+
+    const filters = buildScholarshipFilters({ stdno, year });
+    const query = buildQuery(filters);
+
+    const scalNameField = "SCAL_NM.keyword";
+
+    const raw = unwrapEsResponse(
+      await esClient.search({
+        index: "scholarship",
+        size: 0,
+        body: {
+          query,
+          aggs: {
+            by_year: { terms: { field: "SCH_YEAR", size: topN } },
+            by_nat: { terms: { field: "NAT", size: topN } },
+            by_scal_nm: { terms: { field: scalNameField, size: topN } },
+          },
+        },
+      })
+    );
+
+    const aggs = raw.aggregations || {};
+
+    return res.json({
+      meta: {
+        index: "scholarship",
+        filters: {
+          stdno: stdno ?? null,
+          year: year ?? null,
+        },
+        topN,
+        took: raw.took,
+      },
+      aggregations: {
+        by_year: aggs.by_year?.buckets ?? [],
+        by_nat: aggs.by_nat?.buckets ?? [],
+        by_scal_nm: aggs.by_scal_nm?.buckets ?? [],
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+}
