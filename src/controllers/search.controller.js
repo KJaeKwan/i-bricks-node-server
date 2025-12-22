@@ -50,3 +50,37 @@ export async function search(req, res, next) {
     next(e);
   }
 }
+
+function unwrapEsResponse(res) {
+  return res?.body ?? res;
+}
+
+export async function getAllDocs(req, res, next) {
+  try {
+    const querySchema = z.object({
+      size: z.coerce.number().int().min(1).max(10000).default(1000),
+    });
+
+    const q = querySchema.safeParse(req.query);
+    if (!q.success) {
+      const err = new Error("Invalid query params");
+      err.status = 400;
+      err.detail = q.error.flatten();
+      throw err;
+    }
+
+    const { size } = q.data;
+
+    const result = unwrapEsResponse(
+      await esClient.search({
+        index: "scholarship",
+        size,
+        body: { query: { match_all: {} } },
+      })
+    );
+
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+}
