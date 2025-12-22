@@ -50,28 +50,3 @@ export async function search(req, res, next) {
     next(e);
   }
 }
-
-export async function getById(req, res, next) {
-  try {
-    const paramsSchema = z.object({
-      index: z.string().min(1),
-      id: z.string().min(1),
-    });
-
-    const parsed = paramsSchema.safeParse({ ...req.params });
-    if (!parsed.success) {
-      const err = new Error("Invalid path params");
-      err.status = 400;
-      err.detail = parsed.error.flatten();
-      throw err;
-    }
-
-    const { index, id } = parsed.data;
-    assertIndexAllowed(index);
-
-    const result = await esClient.get({ index, id });
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
