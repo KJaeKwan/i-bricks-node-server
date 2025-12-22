@@ -84,3 +84,47 @@ export async function getAllDocs(req, res, next) {
     next(e);
   }
 }
+
+export async function getAllDocs2(req, res, next) {
+  try {
+    const querySchema = z.object({
+      size: z.coerce.number().int().min(1).max(10000).default(1000),
+
+      stdno: z.string().trim().min(1).optional(),
+      year: z.coerce.number().int().optional(),
+      smt: z.string().trim().min(1).optional(),
+      inpart: z.string().trim().min(1).optional(),
+    });
+
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      const err = new Error("Invalid query params");
+      err.status = 400;
+      err.detail = parsed.error.flatten();
+      throw err;
+    }
+
+    const { size, stdno, year, smt, inpart } = parsed.data;
+
+    const filters = [];
+    if (stdno) filters.push({ term: { STDNO: stdno } });
+    if (typeof year === "number") filters.push({ term: { SCH_YEAR: year } });
+    if (smt) filters.push({ term: { SMT_RCD: smt } });
+    if (inpart) filters.push({ term: { INPART: inpart } });
+
+    const esQuery =
+      filters.length === 0 ? { match_all: {} } : { bool: { filter: filters } };
+
+    const result = unwrapEsResponse(
+      await esClient.search({
+        index: "scholarship",
+        size,
+        body: { query: esQuery },
+      })
+    );
+
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+}
