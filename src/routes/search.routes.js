@@ -1,4 +1,6 @@
 import express from "express";
+import { asyncHandler } from "../middlewares/asyncHandler.js";
+
 import {
   search,
   getAllDocs,
@@ -9,14 +11,10 @@ import {
 
 const router = express.Router();
 
-router.get("/search", search);
-
-router.get("/indices/scholarship", getAllDocs);
-
-router.get("/indices/scholarship/query", getAllDocs2);
-
-router.get("/indices/scholarship/custom-response", getAllDocs3);
-
-router.get("/indices/scholarship/stats", getScholarshipStats);
+router.get("/search", asyncHandler(search));
+router.get("/indices/scholarship", asyncHandler(getAllDocs));
+router.get("/indices/scholarship/query", asyncHandler(getAllDocs2));
+router.get("/indices/scholarship/custom-response", asyncHandler(getAllDocs3));
+router.get("/indices/scholarship/stats", asyncHandler(getScholarshipStats));
 
 export default router;
