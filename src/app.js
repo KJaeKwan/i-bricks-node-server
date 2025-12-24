@@ -6,6 +6,7 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import YAML from "yamljs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { notFound } from "./middlewares/notFound.js";
 
 export function createApp() {
   const app = express();
@@ -21,6 +22,7 @@ export function createApp() {
 
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
+  app.use(notFound);
   app.use(errorHandler);
   return app;
 }
