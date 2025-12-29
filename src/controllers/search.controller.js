@@ -20,15 +20,8 @@ function assertIndexAllowed(index) {
 }
 
 export async function search(req, res, next) {
-  const parsed = searchQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    const err = new Error("Invalid query params");
-    err.status = 400;
-    err.detail = parsed.error.flatten();
-    throw err;
-  }
-
   const { index, q, from, size } = parsed.data;
+
   assertIndexAllowed(index);
 
   const body = q
@@ -36,7 +29,6 @@ export async function search(req, res, next) {
     : { query: { match_all: {} } };
 
   const result = await esClient.search({ index, from, size, body });
-
   res.json(result);
 }
 
