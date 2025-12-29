@@ -202,3 +202,19 @@ paths:
       responses:
         "200":
           description: aggregation buckets
+
+  /indices/scholarship/stats/{stdno}:
+    get:
+      summary: scholarship 인덱스 통계(aggregation) - 학번별
+      description: 학번(stdno)을 path로 받아 필터 적용 후 연도/나라/장학금이름 terms aggregation 결과를 반환합니다.
+      parameters:
+        - in: path
+          name: stdno
+          required: true
+          schema:
+            type: string
+          description: 학번
+          example: "202010766"
+      responses:
+        "200":
+          description: aggregation buckets

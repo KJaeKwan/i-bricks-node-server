@@ -2,13 +2,6 @@ import { z } from "zod";
 import { esClient } from "../config/esClient.js";
 import { env } from "../config/env.js";
 
-const searchQuerySchema = z.object({
-  index: z.string().min(1),
-  q: z.string().optional(),
-  from: z.coerce.number().int().min(0).default(0),
-  size: z.coerce.number().int().min(1).max(100).default(10),
-});
-
 function assertIndexAllowed(index) {
   // ALLOWED_INDICES를 비워두면(미설정) 전체 허용(개발용)
   if (env.ALLOWED_INDICES.length === 0) return;
@@ -281,4 +274,89 @@ export async function getScholarshipStats(req, res, next) {
       by_scal_nm: aggs.by_scal_nm?.buckets ?? [],
     },
   });
+}
+
+export async function getScholarshipStatsByStdno(req, res, next) {
+  try {
+    // Validate
+    const paramsSchema = z.object({
+      stdno: z.string().trim().min(1),
+    });
+
+    const querySchema = z.object({
+      yearSize: z.coerce.number().int().min(1).max(50).default(10),
+      smtSize: z.coerce.number().int().min(1).max(50).default(10),
+    });
+
+    const p = paramsSchema.safeParse(req.params);
+    if (!p.success) {
+      const err = new Error("Invalid path params");
+      err.status = 400;
+      err.detail = p.error.flatten();
+      throw err;
+    }
+
+    const q = querySchema.safeParse(req.query);
+    if (!q.success) {
+      const err = new Error("Invalid query params");
+      err.status = 400;
+      err.detail = q.error.flatten();
+      throw err;
+    }
+
+    const { stdno } = p.data;
+    const { yearSize, smtSize } = q.data;
+
+    // ES Query
+    const esResp = unwrapEsResponse(
+      await esClient.search({
+        index: "scholarship",
+        size: 0,
+        body: {
+          query: { term: { STDNO: stdno } },
+          aggs: {
+            by_year: {
+              terms: {
+                field: "SCH_YEAR",
+                size: yearSize,
+                order: { _key: "desc" },
+              },
+              aggs: {
+                by_smt: {
+                  terms: {
+                    field: "SMT_RCD",
+                    size: smtSize,
+                    order: { _key: "asc" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    // Parse Response
+    const total = (() => {
+      const t = esResp?.hits?.total;
+      if (typeof t === "number") return t;
+      if (t && typeof t.value === "number") return t.value;
+      return 0;
+    })();
+
+    const buckets = esResp?.aggregations?.by_year?.buckets ?? [];
+
+    const by_year = buckets.map((y) => ({
+      year: y.key,
+      count: y.doc_count,
+      by_smt: (y.by_smt?.buckets ?? []).map((s) => ({
+        smt: s.key,
+        count: s.doc_count,
+      })),
+    }));
+
+    return res.json({ stdno, total, by_year });
+  } catch (e) {
+    return next(e);
+  }
 }
